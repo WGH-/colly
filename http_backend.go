@@ -15,6 +15,8 @@
 package colly
 
 import (
+	"bufio"
+	"bytes"
 	"crypto/sha1"
 	"encoding/gob"
 	"encoding/hex"
@@ -201,11 +203,19 @@ func (h *httpBackend) Do(request *http.Request, bodySize int, checkHeadersFunc c
 	}
 	contentEncoding := strings.ToLower(res.Header.Get("Content-Encoding"))
 	if !res.Uncompressed && (strings.Contains(contentEncoding, "gzip") || (contentEncoding == "" && strings.Contains(strings.ToLower(res.Header.Get("Content-Type")), "gzip")) || strings.HasSuffix(strings.ToLower(request.URL.Path), ".xml.gz")) {
-		bodyReader, err = gzip.NewReader(bodyReader)
+		bufReader := bufio.NewReader(bodyReader)
+		bodyReader = bufReader
+		magic, err := bufReader.Peek(2)
 		if err != nil {
 			return nil, err
 		}
-		defer bodyReader.(*gzip.Reader).Close()
+		if bytes.Equal(magic, []byte("\x1F\x8B")) {
+			bodyReader, err = gzip.NewReader(bufReader)
+			if err != nil {
+				return nil, err
+			}
+			defer bodyReader.(*gzip.Reader).Close()
+		}
 	}
 	body, err := ioutil.ReadAll(bodyReader)
 	if err != nil {
