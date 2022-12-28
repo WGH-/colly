@@ -86,6 +86,10 @@ func newUnstartedTestServer() *httptest.Server {
 		ww.Write([]byte(testXml))
 	})
 
+	mux.HandleFunc("/nonexistent.xml.gz", func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	})
+
 	mux.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "POST" {
 			w.Header().Set("Content-Type", "text/html")
@@ -1513,6 +1517,32 @@ func TestCollectorOnXMLWithXML(t *testing.T) {
 
 func TestCollectorOnXMLWithXMLCompressed(t *testing.T) {
 	testCollectorOnXMLWithXML(t, "/test.xml.gz")
+}
+
+func TestCollectorNonexistentXMLGZ(t *testing.T) {
+	// This is a regression test for colly
+	// attempting to decompress all .xml.gz URLs
+	// even if they're not compressed.
+	ts := newTestServer()
+	defer ts.Close()
+
+	c := NewCollector(ParseHTTPErrorResponse())
+
+	onResponseCalled := false
+
+	c.OnResponse(func(resp *Response) {
+		onResponseCalled = true
+	})
+
+	c.OnError(func(resp *Response, err error) {
+		t.Errorf("called on OnError: err=%v", err)
+	})
+
+	c.Visit(ts.URL + "/nonexistent.xml.gz")
+
+	if !onResponseCalled {
+		t.Error("OnResponse was not called")
+	}
 }
 
 func TestCollectorVisitWithTrace(t *testing.T) {
